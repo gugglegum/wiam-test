@@ -18,10 +18,24 @@ $config = [
             'class' => 'yii\caching\FileCache',
         ],
         'log' => [
+            'flushInterval' => 1, // To output log in realtime without buffering
             'targets' => [
+                // Target for log into file
                 [
-                    'class' => 'yii\log\FileTarget',
-                    'levels' => ['error', 'warning'],
+                    'class' => yii\log\FileTarget::class,
+                    'levels' => ['error', 'warning', 'info'],
+                    'logFile' => '@runtime/logs/app.log', // Путь к файлу лога
+                    'maxFileSize' => 1024, // Максимальный размер файла в МБ
+                    'maxLogFiles' => 5, // Количество файлов для хранения
+                    'categories' => [], // Категории логов (по умолчанию все)
+                    'except' => [], // Исключенные категории
+                ],
+                // Target for log into console
+                [
+                    'class' => app\components\ConsoleLogTarget::class,
+                    'levels' => ['error', 'warning', 'info'],
+                    'categories' => ['application'], // Категории логов (по умолчанию все)
+                    'logVars' => [],
                 ],
             ],
         ],
