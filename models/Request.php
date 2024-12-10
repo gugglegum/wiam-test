@@ -39,7 +39,7 @@ class Request extends ActiveRecord
             [['user_id', 'amount', 'term', 'status'], 'integer'],
             [['amount', 'term'], 'integer', 'min' => 0],
             [['status'], 'default', 'value' => self::STATUS_PENDING],
-            //[['user_id'], 'exist', 'skipOnError' => true, 'targetClass' => User::class, 'targetAttribute' => ['user_id' => 'id']],
+            [['user_id'], 'exist', 'skipOnError' => true, 'targetClass' => User::class, 'targetAttribute' => ['user_id' => 'id']],
         ];
     }
 
