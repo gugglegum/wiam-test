@@ -19,6 +19,7 @@ $config = [
         ],
         'log' => [
             'flushInterval' => 1, // To output log in realtime without buffering
+            'traceLevel' => YII_DEBUG ? 3 : 0,
             'targets' => [
                 // Target for log into file
                 [
@@ -29,6 +30,7 @@ $config = [
                     'maxLogFiles' => 5, // Количество файлов для хранения
                     'categories' => [], // Категории логов (по умолчанию все)
                     'except' => [], // Исключенные категории
+                    'logVars' => [],
                 ],
                 // Target for log into console
                 [

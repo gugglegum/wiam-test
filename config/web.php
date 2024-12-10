@@ -37,10 +37,18 @@ $config = [
         ],
         'log' => [
             'traceLevel' => YII_DEBUG ? 3 : 0,
+            'flushInterval' => 1, // To output log in realtime without buffering
             'targets' => [
+                // Target for log into file
                 [
-                    'class' => 'yii\log\FileTarget',
-                    'levels' => ['error', 'warning'],
+                    'class' => yii\log\FileTarget::class,
+                    'levels' => ['error', 'warning', 'info'],
+                    'logFile' => '@runtime/logs/app.log', // Путь к файлу лога
+                    'maxFileSize' => 1024, // Максимальный размер файла в МБ
+                    'maxLogFiles' => 5, // Количество файлов для хранения
+                    'categories' => [], // Категории логов (по умолчанию все)
+                    'except' => [], // Исключенные категории
+                    'logVars' => [],
                 ],
             ],
         ],
