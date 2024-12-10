@@ -31,13 +31,14 @@ class UserController extends Controller
         $user->updated_at = null;
 
         if ($user->save()) {
-            $this->stdout("The user {$username} was successfully created.\n");
+            Yii::info("The user {$username} was successfully created.");
             return ExitCode::OK;
         } else {
-            $this->stderr("Error when creating a user:\n");
+            $errorMsg = "Error when creating a user:\n";
             foreach ($user->errors as $attribute => $errors) {
-                $this->stderr(" - {$attribute}: " . implode(', ', $errors) . "\n");
+                $errorMsg .= " - {$attribute}: " . implode(', ', $errors) . "\n";
             }
+            Yii::error($errorMsg);
             return ExitCode::UNSPECIFIED_ERROR;
         }
     }
