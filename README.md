@@ -1,233 +1,66 @@
-<p align="center">
-    <a href="https://github.com/yiisoft" target="_blank">
-        <img src="https://avatars0.githubusercontent.com/u/993323" height="100px">
-    </a>
-    <h1 align="center">Yii 2 Basic Project Template</h1>
-    <br>
-</p>
+# Обработчик кредитных заявок (тестовое задание для Wiam Group)
 
-Yii 2 Basic Project Template is a skeleton [Yii 2](https://www.yiiframework.com/) application best for
-rapidly creating small projects.
+Приложение обрабатывает заявки пользователей на кредит, обеспечивая целостность данных и предотвращая условия гонки с помощью механизмов блокировки в базе данных PostgreSQL. Проект предоставляет API из 2 методов: `POST /requests` и `GET /processor?delay=5`. Первый позволяет создавать новые заявки на кредит от пользователей, а второй запускает обработку всех необработанных заявок. Обработка заявок сводится к изменению статуса на Одобрено или Отказано. Решение принимается случайным образом с вероятностью 10% в пользу одобрения. При этом, если у пользователя уже есть хотя бы одна одобренная заявка, то все новые заявки должны получать отказ.
 
-The template contains the basic features including user login/logout and a contact page.
-It includes all commonly used configurations that would allow you to focus on adding new
-features to your application.
+По условию задачи возможен одновременный запуск нескольких процессов обработки заявок, что не должно мешать корректному выполнению и сохранению базовых условий: не более одной одобренной заявки на пользователя. При этом в обработке заявки добавлена эмуляция задержки, длительность которой в секундах передаётся в GET-параметре delay.
 
-[![Latest Stable Version](https://img.shields.io/packagist/v/yiisoft/yii2-app-basic.svg)](https://packagist.org/packages/yiisoft/yii2-app-basic)
-[![Total Downloads](https://img.shields.io/packagist/dt/yiisoft/yii2-app-basic.svg)](https://packagist.org/packages/yiisoft/yii2-app-basic)
-[![build](https://github.com/yiisoft/yii2-app-basic/workflows/build/badge.svg)](https://github.com/yiisoft/yii2-app-basic/actions?query=workflow%3Abuild)
+Из-за параллельного выполнения теоретически возможна ситуация, когда оба процесса получили разные заявки, но от одного пользователя, одновременно проверили наличие у него одобренных заявок, одновременно убедились, что таких заявок нет, и одновременно оба одобрили каждый свою заявку. В этом случае нарушается условие задачи про только одну одобренную заявку на пользователя. Для удобства тестирования данного аспекта задержка вставлена именно между проверкой одобренных заявок и обновлением статуса. Для решения этой проблемы было решено использовать блокировку строки пользователя текущей обрабатываемой заявки через `SELECT ... FOR UPDATE NOWAIT`. `FOR UPDATE` блокирует строку до завершения транзакции и не позволяет другому процессу получить блокировку этой же записи. А `NOWAIT` позволяет не блокировать выполнение другого процесса, который наткнулся на заблокированного пользователя, а сразу пропустить заявку и перейти к следующей. Таким образом несколько процессов обработки работают параллельно, их производительность кратна кол-ву запущенных процессов и не возникает конфликтов. Также на всякий случай обрабатывается вероятность Deadlock и Serialization failure - в этом случае производится повторное выполнение транзакции с той же заявкой.
 
-DIRECTORY STRUCTURE
--------------------
+## Установка
 
-      assets/             contains assets definition
-      commands/           contains console commands (controllers)
-      config/             contains application configurations
-      controllers/        contains Web controller classes
-      mail/               contains view files for e-mails
-      models/             contains model classes
-      runtime/            contains files generated during runtime
-      tests/              contains various tests for the basic application
-      vendor/             contains dependent 3rd-party packages
-      views/              contains view files for the Web application
-      web/                contains the entry script and Web resources
+(предполагается, что вы используете Debian/Ubuntu-подобный Linux)
 
+Клонируем репозиторий и запускаем докер-контейнеры:
 
-
-REQUIREMENTS
-------------
-
-The minimum requirement by this project template that your Web server supports PHP 7.4.
-
-
-INSTALLATION
-------------
-
-### Install via Composer
-
-If you do not have [Composer](https://getcomposer.org/), you may install it by following the instructions
-at [getcomposer.org](https://getcomposer.org/doc/00-intro.md#installation-nix).
-
-You can then install this project template using the following command:
-
-~~~
-composer create-project --prefer-dist yiisoft/yii2-app-basic basic
-~~~
-
-Now you should be able to access the application through the following URL, assuming `basic` is the directory
-directly under the Web root.
-
-~~~
-http://localhost/basic/web/
-~~~
-
-### Install from an Archive File
-
-Extract the archive file downloaded from [yiiframework.com](https://www.yiiframework.com/download/) to
-a directory named `basic` that is directly under the Web root.
-
-Set cookie validation key in `config/web.php` file to some random secret string:
-
-```php
-'request' => [
-    // !!! insert a secret key in the following (if it is empty) - this is required by cookie validation
-    'cookieValidationKey' => '<secret random string goes here>',
-],
+```bash
+git clone https://github.com/gugglegum/wiam-test.git
+cd wiam-test
+sudo docker-compose up -d
 ```
 
-You can then access the application through the following URL:
+Заходим внутрь php-контейнера и производим в нём первичную настройку:
 
-~~~
-http://localhost/basic/web/
-~~~
-
-
-### Install with Docker
-
-Update your vendor packages
-
-    docker-compose run --rm php composer update --prefer-dist
-    
-Run the installation triggers (creating cookie validation code)
-
-    docker-compose run --rm php composer install    
-    
-Start the container
-
-    docker-compose up -d
-    
-You can then access the application through the following URL:
-
-    http://127.0.0.1:8000
-
-**NOTES:** 
-- Minimum required Docker engine version `17.04` for development (see [Performance tuning for volume mounts](https://docs.docker.com/docker-for-mac/osxfs-caching/))
-- The default configuration uses a host-volume in your home directory `.docker-composer` for composer caches
-
-
-CONFIGURATION
--------------
-
-### Database
-
-Edit the file `config/db.php` with real data, for example:
-
-```php
-return [
-    'class' => 'yii\db\Connection',
-    'dsn' => 'mysql:host=localhost;dbname=yii2basic',
-    'username' => 'root',
-    'password' => '1234',
-    'charset' => 'utf8',
-];
+```bash
+sudo docker exec -it php-container bash
+curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+apt install git
+apt install unzip
+composer install
+php yii migrate
+php yii user/create "john_doe" "john.doe@example.com" "secure_password123"
+php yii user/create "john_smith" "john.smith@example.com" "secure_password321"
+php yii user/create "jane_public" "jane.public@example.com" "secure_password312"
+chmod -R 777 runtime
 ```
 
-**NOTES:**
-- Yii won't create the database for you, this has to be done manually before you can access it.
-- Check and edit the other files in the `config/` directory to customize your application as required.
-- Refer to the README in the `tests` directory for information specific to basic application tests.
+Так мы установили внутри php-контейнера Composer, git, unzip (нужен для composer), выполнили `composer install`, накатили миграции и создали 3 тестовых пользователя.
 
+Далее выходим из докер-контейнера и через HTTP-запросы добавляем несколько тестовых заявок на кредиты:
 
-TESTING
--------
-
-Tests are located in `tests` directory. They are developed with [Codeception PHP Testing Framework](https://codeception.com/).
-By default, there are 3 test suites:
-
-- `unit`
-- `functional`
-- `acceptance`
-
-Tests can be executed by running
-
-```
-vendor/bin/codecept run
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"user_id": 1, "amount": 3000, "term": 30}' http://localhost:8080/request
+curl -X POST -H "Content-Type: application/json" -d '{"user_id": 2, "amount": 5000, "term": 60}' http://localhost:8080/request
+curl -X POST -H "Content-Type: application/json" -d '{"user_id": 1, "amount": 4000, "term": 90}' http://localhost:8080/request
+curl -X POST -H "Content-Type: application/json" -d '{"user_id": 2, "amount": 2000, "term": 45}' http://localhost:8080/request
 ```
 
-The command above will execute unit and functional tests. Unit tests are testing the system components, while functional
-tests are for testing user interaction. Acceptance tests are disabled by default as they require additional setup since
-they perform testing in real browser. 
+### Тестирование
 
-
-### Running  acceptance tests
-
-To execute acceptance tests do the following:  
-
-1. Rename `tests/acceptance.suite.yml.example` to `tests/acceptance.suite.yml` to enable suite configuration
-
-2. Replace `codeception/base` package in `composer.json` with `codeception/codeception` to install full-featured
-   version of Codeception
-
-3. Update dependencies with Composer 
-
-    ```
-    composer update  
-    ```
-
-4. Download [Selenium Server](https://www.seleniumhq.org/download/) and launch it:
-
-    ```
-    java -jar ~/selenium-server-standalone-x.xx.x.jar
-    ```
-
-    In case of using Selenium Server 3.0 with Firefox browser since v48 or Google Chrome since v53 you must download [GeckoDriver](https://github.com/mozilla/geckodriver/releases) or [ChromeDriver](https://sites.google.com/a/chromium.org/chromedriver/downloads) and launch Selenium with it:
-
-    ```
-    # for Firefox
-    java -jar -Dwebdriver.gecko.driver=~/geckodriver ~/selenium-server-standalone-3.xx.x.jar
-    
-    # for Google Chrome
-    java -jar -Dwebdriver.chrome.driver=~/chromedriver ~/selenium-server-standalone-3.xx.x.jar
-    ``` 
-    
-    As an alternative way you can use already configured Docker container with older versions of Selenium and Firefox:
-    
-    ```
-    docker run --net=host selenium/standalone-firefox:2.53.0
-    ```
-
-5. (Optional) Create `yii2basic_test` database and update it by applying migrations if you have them.
-
-   ```
-   tests/bin/yii migrate
-   ```
-
-   The database configuration can be found at `config/test_db.php`.
-
-
-6. Start web server:
-
-    ```
-    tests/bin/yii serve
-    ```
-
-7. Now you can run all available tests
-
-   ```
-   # run all available tests
-   vendor/bin/codecept run
-
-   # run acceptance tests
-   vendor/bin/codecept run acceptance
-
-   # run only unit and functional tests
-   vendor/bin/codecept run unit,functional
-   ```
-
-### Code coverage support
-
-By default, code coverage is disabled in `codeception.yml` configuration file, you should uncomment needed rows to be able
-to collect code coverage. You can run your tests and collect coverage with the following command:
-
-```
-#collect coverage for all tests
-vendor/bin/codecept run --coverage --coverage-html --coverage-xml
-
-#collect coverage only for unit tests
-vendor/bin/codecept run unit --coverage --coverage-html --coverage-xml
-
-#collect coverage for unit and functional tests
-vendor/bin/codecept run functional,unit --coverage --coverage-html --coverage-xml
+Для проверки текущего состояния заявок можем воспользоваться командой:
+```bash
+PGPASSWORD=wiam_password psql -U wiam_user -d WiamTest -h localhost -c "SELECT * FROM requests"
 ```
 
-You can see code coverage output under the `tests/_output` directory.
+На начальном этапе у всех заявок должен быть status = 0.
+
+Для проверки одновременного выполнения обработчика заявок открываем 2 терминала и почти одновременно в обоих терминалах запускаем команду:
+
+```bash
+curl -X GET "http://localhost:8080/processor?delay=5"
+```
+После их окончания смотрим лог в runtime/logs/app.log
+
+Для сброса статуса всех заявок можно выполнить:
+```bash
+PGPASSWORD=wiam_password psql -U wiam_user -d WiamTest -h localhost -c "UPDATE requests SET status = 0"
+```
