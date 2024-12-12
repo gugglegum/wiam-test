@@ -36,7 +36,7 @@ $config = [
             'useFileTransport' => true,
         ],
         'log' => [
-            'traceLevel' => YII_DEBUG ? 3 : 0,
+//            'traceLevel' => YII_DEBUG ? 3 : 0,
             'flushInterval' => 1, // To output log in realtime without buffering
             'targets' => [
                 // Target for log into file
@@ -58,12 +58,12 @@ $config = [
             'showScriptName' => false,
             'rules' => [
                 'POST request' => 'request/create',
-                'GET processor' => 'processor/index',
+                'GET processor' => 'processor/handle',
             ],
         ],
-
     ],
     'params' => $params,
+    'container' => require __DIR__ . '/container.php',
 ];
 
 if (YII_ENV_DEV) {

@@ -19,7 +19,7 @@ $config = [
         ],
         'log' => [
             'flushInterval' => 1, // To output log in realtime without buffering
-            'traceLevel' => YII_DEBUG ? 3 : 0,
+//            'traceLevel' => YII_DEBUG ? 3 : 0,
             'targets' => [
                 // Target for log into file
                 [
@@ -44,6 +44,7 @@ $config = [
         'db' => $db,
     ],
     'params' => $params,
+    'container' => require __DIR__ . '/container.php',
     /*
     'controllerMap' => [
         'fixture' => [ // Fixture generation command line.

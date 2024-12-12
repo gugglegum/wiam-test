@@ -4,16 +4,31 @@ declare(strict_types=1);
 
 namespace app\controllers;
 
+use app\services\RequestCreator;
 use Yii;
+use yii\db\Exception as DbException;
 use yii\rest\Controller;
 use yii\web\Response;
 use yii\web\BadRequestHttpException;
-use app\models\Request;
 
+/**
+ * RequestController
+ *
+ * Creates new request
+ */
 class RequestController extends Controller
 {
+    private RequestCreator $requestCreator;
+
+    public function __construct($id, $module, RequestCreator $requestCreator, array $config = [])
+    {
+        $this->requestCreator = $requestCreator;
+        parent::__construct($id, $module, $config);
+    }
+
     /**
-     * Configuring behavior to return JSON responses.
+     * Configuring behavior to return JSON responses
+     *
      * @return array
      */
     public function behaviors(): array
@@ -24,50 +39,88 @@ class RequestController extends Controller
     }
 
     /**
-     * Create a new request by handling POST request /requests
+     * Create a new request by handling request POST /requests
      *
      * @return array
      * @throws BadRequestHttpException
+     *
+     * @SWG\Post(
+     *     path="/requests",
+     *     summary="Create new request",
+     *     tags={"Requests"},
+     *     @SWG\Parameter(
+     *         name="body",
+     *         in="body",
+     *         required=true,
+     *         @SWG\Schema(
+     *             type="object",
+     *             required={"user_id", "amount", "term"},
+     *             @SWG\Property(
+     *                 property="user_id",
+     *                 type="integer",
+     *                 description="User ID",
+     *                 example=4
+     *             ),
+     *             @SWG\Property(
+     *                 property="amount",
+     *                 type="integer",
+     *                 description="Amount of money",
+     *                 example=3000
+     *             ),
+     *             @SWG\Property(
+     *                 property="term",
+     *                 type="integer",
+     *                 description="Credit request period in days",
+     *                 example=30
+     *             )
+     *         )
+     *     ),
+     *     @SWG\Response(
+     *         response=201,
+     *         description="Request successfully created",
+     *         @SWG\Schema(
+     *             type="object",
+     *             @SWG\Property(property="result", type="boolean", example=true),
+     *             @SWG\Property(property="id", type="integer", example=123)
+     *         )
+     *     ),
+     *     @SWG\Response(
+     *         response=400,
+     *         description="Incorrect input data",
+     *         @SWG\Schema(
+     *             type="object",
+     *             @SWG\Property(property="result", type="boolean", example=false),
+     *             @SWG\Property(property="error", type="string", example="User Id is invalid.")
+     *         )
+     *     )
+     * )
      */
     public function actionCreate(): array
     {
-        Yii::info("Start creating request");
-
         $payload = Yii::$app->request->post();
 
         if (empty($payload)) {
             throw new BadRequestHttpException('Empty POST payload');
         }
 
-        $request = new Request();
-        $request->load($payload, ''); // Loads data directly without using a nested array
-        $request->status = Request::STATUS_PENDING; // Set pending status
-
-        Yii::info("New request: " . json_encode($request->toArray()));
-
         try {
-            if ($request->save()) {
-                Yii::info("Saved successfully");
-
+            $result = $this->requestCreator->createRequest($payload);
+            if ($result['success']) {
                 // Set HTTP status 201 (Created)
                 Yii::$app->response->statusCode = 201;
-
                 return [
                     'result' => true,
-                    'id' => $request->id,
+                    'id' => $result['request']->id,
                 ];
             } else {
-                Yii::info("Validation problem(s): " . json_encode($request->errors));
-
                 // Set HTTP status 500 (Internal Server Error)
                 Yii::$app->response->statusCode = 500;
-
                 return [
                     'result' => false,
-                    'error' => count($request->errors) > 0 ? $request->errors[array_key_first($request->errors)][0] : 'Unknown error',
+                    'error' => $result['request']->hasErrors() ? $result['request']->errors[array_key_first($result['request']->errors)][0] : 'Unknown error',
                 ];
             }
-        } catch (\yii\db\Exception $e) {
+        } catch (DbException $e) {
             Yii::info("DB error: [{$e->getCode()}] {$e->getMessage()}");
 
             // Set HTTP status 500 (Internal Server Error)

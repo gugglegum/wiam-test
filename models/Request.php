@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace app\models;
 
-use Yii;
+use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 
 /**
+ * Loan request from user
+ *
  * @property int $id
  * @property int $user_id
  * @property int $amount
@@ -29,7 +31,8 @@ class Request extends ActiveRecord
     }
 
     /**
-     * Defines validation rules for the model.
+     * Defines validation rules for the model
+     *
      * @return array
      */
     public function rules(): array
@@ -39,15 +42,17 @@ class Request extends ActiveRecord
             [['user_id', 'amount', 'term', 'status'], 'integer'],
             [['amount', 'term'], 'integer', 'min' => 0],
             [['status'], 'default', 'value' => self::STATUS_PENDING],
+            [['status'], 'in', 'range' => $this->getStatusCodes()],
             [['user_id'], 'exist', 'skipOnError' => true, 'targetClass' => User::class, 'targetAttribute' => ['user_id' => 'id']],
         ];
     }
 
     /**
-     * The relationship “the request belongs to the user”.
-     * @return \yii\db\ActiveQuery
+     * The relationship “the request belongs to the user”
+     *
+     * @return ActiveQuery
      */
-    public function getUser(): \yii\db\ActiveQuery
+    public function getUser(): ActiveQuery
     {
         return $this->hasOne(User::class, ['id' => 'user_id']);
     }
@@ -58,15 +63,6 @@ class Request extends ActiveRecord
             self::STATUS_PENDING,
             self::STATUS_APPROVED,
             self::STATUS_DECLINED,
-        ];
-    }
-
-    public static function getStatusList(): array
-    {
-        return [
-            self::STATUS_PENDING => Yii::t('app', 'Pending'),
-            self::STATUS_APPROVED => Yii::t('app', 'Approved'),
-            self::STATUS_DECLINED => Yii::t('app', 'Rejected'),
         ];
     }
 }

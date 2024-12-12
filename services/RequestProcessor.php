@@ -2,14 +2,18 @@
 
 declare(strict_types=1);
 
-namespace app\components;
+namespace app\services;
 
 use app\models\User;
+use Throwable;
 use Yii;
 use app\models\Request;
 use yii\db\Exception as DbException;
 
-class RequestProcessor
+/**
+ * RequestProcessor
+ */
+class RequestProcessor implements RequestProcessorInterface
 {
     /**
      * Process single request
@@ -22,21 +26,32 @@ class RequestProcessor
      * @param int $delay OPTIONAL Delay in seconds
      * @return bool TRUE if the request processed successfully, FALSE if skipped due to the blocking by another process
      * @throws DbException When database error occur
+     * @throws Throwable
      */
     public function processRequest(Request $request, int $delay = 0): bool
     {
-        $userId = $request->user_id;
-
         // Starting the transaction
         $transaction = Yii::$app->db->beginTransaction();
         try {
-            // Attempting to lock a user string with FOR UPDATE NOWAIT
-            $sql = User::find()->select('id')->where(['id' => $userId])->createCommand()->getRawSql() . ' FOR UPDATE NOWAIT';
-            Yii::$app->db->createCommand($sql)->execute();
+            // Attempting to lock a user row with FOR UPDATE NOWAIT
+            try {
+                $sql = User::find()->select('id')->where(['id' => $request->user_id])->createCommand()->getRawSql() . ' FOR UPDATE NOWAIT';
+                Yii::$app->db->createCommand($sql)->execute();
+            } catch (DbException $e) {
+                $transaction->rollBack();
+                // Check error code for blocking FOR UPDATE NOWAIT (Lock Not Available)
+                if (isset($e->errorInfo[0]) && $e->errorInfo[0] == '55P03') {
+                    // Blocked - skipping the request
+                    return false;
+                } else {
+                    // Other DB errors
+                    throw $e;
+                }
+            }
 
             // Check if the user has any approved requests
             $hasApproved = Request::find()
-                ->where(['user_id' => $userId, 'status' => Request::STATUS_APPROVED])
+                ->where(['user_id' => $request->user_id, 'status' => Request::STATUS_APPROVED])
                 ->exists();
 
             // Emulating the delay
@@ -61,18 +76,7 @@ class RequestProcessor
             $transaction->commit();
 
             return true;
-        } catch (DbException $e) {
-            $transaction->rollBack();
-            // Check error code for blocking FOR UPDATE NOWAIT
-            if (isset($e->errorInfo[0]) && $e->errorInfo[0] == '55P03') {
-                // Blocking: skipping the request
-                return false;
-            } else {
-                // Other DB errors
-                throw $e;
-            }
-        } catch (\Exception $e) {
-            // Handling other exceptions
+        } catch (Throwable $e) {
             $transaction->rollBack();
             throw $e;
         }

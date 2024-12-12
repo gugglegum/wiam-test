@@ -4,19 +4,48 @@ declare(strict_types=1);
 
 namespace app\controllers;
 
+use InvalidArgumentException;
+use Throwable;
 use Yii;
-use yii\db\Exception as DbException;
+use yii\base\Module;
 use yii\rest\Controller;
 use yii\web\Response;
 use yii\web\BadRequestHttpException;
 use yii\filters\ContentNegotiator;
-use app\components\RequestProcessor;
-use app\models\Request;
+use app\services\RequestQueue;
+use yii\web\ServerErrorHttpException;
 
+/**
+ * ProcessorController
+ *
+ * Processes all requests in PENDING status, making a decision: Approve or Decline.
+ */
 class ProcessorController extends Controller
 {
     /**
-     * Configuring behavior to return JSON responses.
+     * Request processing service
+     *
+     * @var RequestQueue
+     */
+    private RequestQueue $requestQueue;
+
+    /**
+     * ProcessorController constructor
+     *
+     * @param string $id
+     * @param Module $module
+     * @param RequestQueue $requestQueue
+     * @param array $config
+     */
+    public function __construct($id, $module, RequestQueue $requestQueue, array $config = [])
+    {
+        $this->requestQueue = $requestQueue;
+        parent::__construct($id, $module, $config);
+    }
+
+    /**
+     * Configuring behavior to return JSON responses
+     *
      * @return array
      */
     public function behaviors(): array
@@ -32,89 +61,64 @@ class ProcessorController extends Controller
     }
 
     /**
-     * Handle GET request /processor?delay=5
+     * Processing of all requests with PENDING status
      *
      * @param int $delay
      * @return array
-     * @throws BadRequestHttpException
+     * @throws BadRequestHttpException|ServerErrorHttpException
+     *
+     * @SWG\Get(
+     *     path="/processor",
+     *     summary="Process all pending requests",
+     *     tags={"Processor"},
+     *     @SWG\Parameter(
+     *         name="delay",
+     *         in="query",
+     *         type="integer",
+     *         description="Delay in seconds before each request is processed",
+     *         required=false,
+     *         default=0,
+     *         example=5
+     *     ),
+     *     @SWG\Response(
+     *         response=200,
+     *         description="Successful processing of requests",
+     *         @SWG\Schema(
+     *             type="object",
+     *             @SWG\Property(property="result", type="boolean", example=true)
+     *         )
+     *     ),
+     *     @SWG\Response(
+     *         response=400,
+     *         description="Incorrect delay parameter",
+     *         @SWG\Schema(
+     *             type="object",
+     *             @SWG\Property(property="result", type="boolean", example=false),
+     *             @SWG\Property(property="error", type="string", example="Invalid delay parameter")
+     *         )
+     *     ),
+     *     @SWG\Response(
+     *         response=500,
+     *         description="Internal server error",
+     *         @SWG\Schema(
+     *             type="object",
+     *             @SWG\Property(property="result", type="boolean", example=false),
+     *             @SWG\Property(property="error", type="string", example="Processing error")
+     *         )
+     *     )
+     * )
      */
-    public function actionIndex(int $delay = 0): array
+    public function actionHandle(int $delay = 0): array
     {
-        Yii::info("Start processing requests");
-
-        if (!is_numeric($delay) || $delay < 0) {
-            throw new BadRequestHttpException("The delay parameter must be a non-negative integer");
+        try {
+            $this->requestQueue->processAllPendingRequests($delay);
+        } catch (InvalidArgumentException $e) {
+            Yii::error("Invalid Argument: " . $e->getMessage());
+            throw new BadRequestHttpException($e->getMessage());
+        } catch (Throwable $e) {
+            Yii::error("Processing Error: " . $e->getMessage());
+            throw new ServerErrorHttpException($e->getMessage());
         }
-
-        $processedCount = 0;
-        $skippedCount = 0;
-        $approvedCount = 0;
-        $declinedCount = 0;
-        $previousRequestId = 0;
-
-        $processor = new RequestProcessor();
-
-
-        // Requests processing cycle
-        while (true) {
-            // Starting the transaction
-            $transaction = Yii::$app->db->beginTransaction();
-            try {
-                // Retrieve one request with PENDING status
-                /** @var Request $request */
-                $request = Request::find()
-                    ->where(['status' => Request::STATUS_PENDING])
-                    ->andWhere(['>', 'id', $previousRequestId])
-                    ->orderBy(['id' => SORT_ASC])
-                    ->limit(1)
-                    ->one();
-
-                if (!$request) {
-                    // There are no more requests to process
-                    $transaction->rollBack();
-                    break;
-                }
-
-                Yii::info("Process request #{$request->id} (for user #{$request->user_id})");
-
-                // Processing the request
-                $result = $processor->processRequest($request, $delay);
-
-                if ($result) {
-                    $processedCount++;
-                    if ($request->status === Request::STATUS_APPROVED) {
-                        $approvedCount++;
-                        Yii::info("Decision: approved");
-                    } elseif ($request->status === Request::STATUS_DECLINED) {
-                        $declinedCount++;
-                        Yii::info("Decision: declined");
-                    }
-                } else{
-                    $skippedCount++;
-                    Yii::info("Request's user #{$request->user_id} is blocked by another process - skipping the request");
-                }
-
-                $previousRequestId = $request->id;
-                $transaction->commit();
-            } catch (DbException $e) {
-                Yii::error("Error: " . $e->getMessage());
-                $transaction->rollBack();
-
-                // If PostgreSQL error code "55P03" (Deadlock detected) or "40001" (Serialization failure) - repeat
-                // the transaction with current request, otherwise skip the request and move on.
-                if (!isset($e->errorInfo[0]) || !in_array($e->errorInfo[0], ['55P03', '40001'])) {
-                    $previousRequestId = $request->id;
-                }
-                continue;
-            } catch (\Exception $e) {
-                Yii::error("Error: " . $e->getMessage());
-                $transaction->rollBack();
-                $previousRequestId = $request->id;
-                continue;
-            }
-        }
-
-        Yii::info("Processing completed. Total processed: {$processedCount}, skipped: {$skippedCount}, Approved: {$approvedCount}, Declined: {$declinedCount}");
 
         return [
             'result' => true,
